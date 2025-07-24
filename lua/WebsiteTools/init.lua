@@ -3,23 +3,25 @@ local M = {}
 
 -- default values
 
-function M.setup()
-	M.blog_source_code_url = "~/website-nate/nate-website/src/assets/latex"
-	M.blog_webpage_url = "~/website-nate/nate-website/src/app/components/blog/blog.component.ts"
-	-- this is only useful if I have a document somewhere else I wanna pot
-	M.blog_public_post_url = "~/website-nate/nate-website/src/assets/pdfs/blogs"
-	M.blog_latex_template = "~/.config/nvim/preamble/blog_preamble.tex"
+function M.setup(config)
+    assert(type(config) == "table", "Configuration must be a table")
 
-	M.books_pdf_url = "~/website-nate/nate-website/src/assets/pdfs/books"
-	M.books_webpage_url = "~/website-nate/nate-website/src/app/components/books/books.component.ts"
-	M.books_latex_template = "~/.config/nvim/preamble/books_preamble.tex"
+    -- Set up the variables using the provided config
+    M.blog_source_code_url = assert(config.blog_source_code_url, "blog_source_code_url is required")
+    M.blog_webpage_url = assert(config.blog_webpage_url, "blog_webpage_url is required")
+    M.blog_public_post_url = assert(config.blog_public_post_url, "blog_public_post_url is required")
+    M.blog_latex_template = assert(config.blog_latex_template, "blog_latex_template is required")
 
-	M.notes_source_code_url = "~/website-nate/nate-website/src/assets/latex/notes"
-	M.notes_pdf_url = "~/website-nate/nate-website/src/assets/pdfs/notes"
-	M.notes_webpage_url = "~/website-nate/nate-website/src/app/components/notes/notes.component.ts"
-	M.notes_latex_template = "~/.config/nvim/preamble/notes_preamble.tex"
+    M.books_pdf_url = assert(config.books_pdf_url, "books_pdf_url is required")
+    M.books_webpage_url = assert(config.books_webpage_url, "books_webpage_url is required")
+    M.books_latex_template = assert(config.books_latex_template, "books_latex_template is required")
 
-	M.website_dir = "/Users/nathanaelchwojko-srawkey/website-nate/nate-website"
+    M.notes_source_code_url = assert(config.notes_source_code_url, "notes_source_code_url is required")
+    M.notes_pdf_url = assert(config.notes_pdf_url, "notes_pdf_url is required")
+    M.notes_webpage_url = assert(config.notes_webpage_url, "notes_webpage_url is required")
+    M.notes_latex_template = assert(config.notes_latex_template, "notes_latex_template is required")
+
+    M.website_dir = assert(config.website_dir, "website_dir is required")
 end
 
 -- Helper function to trim whitespace
