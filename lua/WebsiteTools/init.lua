@@ -22,6 +22,18 @@ function M.setup(config)
     M.notes_latex_template = assert(config.notes_latex_template, "notes_latex_template is required")
 
     M.website_dir = assert(config.website_dir, "website_dir is required")
+
+    -- Root of the textbook sources. The textbook freshness check compares each
+    -- published PDF in books_pdf_url against the same-named PDF one level under
+    -- here — the ONLY coupling is filename equality (no series-map / overlay).
+    M.textbooks_dir = config.textbooks_dir
+        or os.getenv("TEXTBOOKS")
+        or "~/Documents/academic/textbooks"
+
+    -- Optional: the standalone EYNTKA series-map project. Built + synced into the
+    -- website assets before each publish. Defaults to the canonical location.
+    M.series_map_dir = config.series_map_dir
+        or ((os.getenv("TEXTBOOKS") or "~/Documents/academic/textbooks") .. "/.eyntka/series-map")
 end
 
 -- Helper function to trim whitespace
@@ -41,12 +53,12 @@ function M.createNewBlog()
     local buf = vim.api.nvim_create_buf(false, true)
 
     -- Set buffer options
-    vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-    vim.api.nvim_buf_set_option(buf, 'filetype', 'text')
+	vim.api.nvim_set_option_value('bufhidden', 'wipe', { buf = buf })
+	vim.api.nvim_set_option_value('filetype', 'text', { buf = buf })
 
     -- Get editor dimensions
-    local width = vim.api.nvim_get_option("columns")
-    local height = vim.api.nvim_get_option("lines")
+	local width = vim.api.nvim_get_option_value("columns", {})
+	local height = vim.api.nvim_get_option_value("lines", {})
 
     -- Calculate floating window size and position
     local win_height = 8
@@ -71,7 +83,7 @@ function M.createNewBlog()
     local win = vim.api.nvim_open_win(buf, true, opts)
 
     -- Set window options
-    vim.api.nvim_win_set_option(win, 'winhl', 'Normal:Normal,FloatBorder:FloatBorder')
+	vim.api.nvim_set_option_value('winhl', 'Normal:Normal,FloatBorder:FloatBorder', { win = win })
 
     -- Add prompt text with information
     local blog_source = vim.fn.expand(M.blog_source_code_url)
@@ -92,38 +104,31 @@ function M.createNewBlog()
     vim.api.nvim_win_set_cursor(win, {1, 7})
 
     -- Enter insert mode
-    vim.cmd('startinsert!')
+    vim.cmd.startinsert()
 
     -- Set up keymap for Enter key
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<CR>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            -- Get the title from the buffer
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local title = lines[1]:gsub("^Title: ", ""):trim()
+    vim.keymap.set('i', '<CR>', function()
+        -- Get the title from the buffer
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local title = lines[1]:gsub("^Title: ", ""):trim()
 
-            if title == "" then
-                vim.notify("Please enter a title", vim.log.levels.WARN)
-                return
-            end
-
-            -- Close the floating window
-            vim.api.nvim_win_close(win, true)
-
-            -- Create the blog
-            M.create_blog_files(title)
+        if title == "" then
+            vim.notify("Please enter a title", vim.log.levels.WARN)
+            return
         end
-    })
+
+        -- Close the floating window
+        vim.api.nvim_win_close(win, true)
+
+        -- Create the blog
+        M.create_blog_files(title)
+    end, { noremap = true, silent = true, buffer = buf })
+
 
     -- Set up keymap for Escape key to close window
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<Esc>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-        end
-    })
+    vim.keymap.set('i', '<Esc>', function()
+        vim.api.nvim_win_close(win, true)
+    end, { noremap = true, silent = true, buffer = buf })
 end
 
 function M.create_blog_files(title)
@@ -220,7 +225,7 @@ function M.create_blog_files(title)
         vim.api.nvim_win_set_cursor(0, {target_line, 0})
 
         -- Enter insert mode
-        vim.cmd('startinsert')
+        vim.cmd.startinsert()
 
         vim.notify("Blog created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
     else
@@ -239,8 +244,8 @@ function M.createNewNote()
     local buf = vim.api.nvim_create_buf(false, true)
 
     -- Set buffer options
-    vim.api.nvim_buf_set_option(buf, 'bufhidden', 'wipe')
-    vim.api.nvim_buf_set_option(buf, 'filetype', 'text')
+    vim.api.nvim_set_option_value('bufhidden', 'wipe', {buf = buf})
+    vim.api.nvim_set_option_value('filetype', 'text', {buf = buf})
 
     -- Get editor dimensions
     local width = vim.api.nvim_get_option("columns")
@@ -279,7 +284,7 @@ function M.createNewNote()
         "Note will be created at: " .. note_source,
         "all spaces will automatically be converted to underscores",
         "an empty bibliography file will also be created",
-        "Run \"UpdateNotePage\" to add the note to the note page",
+        "Run \"UpdateNotesPage\" to add the note to the note page",
         "",
         "press ENTER to create new note"
     }
@@ -290,38 +295,30 @@ function M.createNewNote()
     vim.api.nvim_win_set_cursor(win, {1, 7})
 
     -- Enter insert mode
-    vim.cmd('startinsert!')
+    vim.cmd.startinsert()
 
     -- Set up keymap for Enter key
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<CR>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            -- Get the title from the buffer
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local title = lines[1]:gsub("^Title: ", ""):trim()
+    vim.keymap.set('i', '<CR>', function()
+        -- Get the title from the buffer
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local title = lines[1]:gsub("^Title: ", ""):trim()
 
-            if title == "" then
-                vim.notify("Please enter a title", vim.log.levels.WARN)
-                return
-            end
-
-            -- Close the floating window
-            vim.api.nvim_win_close(win, true)
-
-            -- Create the note
-            M.create_note_files(title)
+        if title == "" then
+            vim.notify("Please enter a title", vim.log.levels.WARN)
+            return
         end
-    })
+
+        -- Close the floating window
+        vim.api.nvim_win_close(win, true)
+
+        -- Create the note
+        M.create_note_files(title)
+    end, { noremap = true, silent = true, buffer = buf })
 
     -- Set up keymap for Escape key to close window
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<Esc>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-        end
-    })
+    vim.keymap.set('i', '<Esc>', function()
+        vim.api.nvim_win_close(win, true)
+    end, { noremap = true, silent = true, buffer = buf })
 end
 
 function M.create_note_files(title)
@@ -407,7 +404,7 @@ function M.create_note_files(title)
         vim.api.nvim_win_set_cursor(0, {target_line, 0})
 
         -- Enter insert mode
-        vim.cmd('startinsert')
+        vim.cmd.startinsert()
 
         vim.notify("Note created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
     else
@@ -477,38 +474,30 @@ function M.createNewBook()
     vim.api.nvim_win_set_cursor(win, {1, 7})
 
     -- Enter insert mode
-    vim.cmd('startinsert!')
+    vim.cmd.startinsert()
 
     -- Set up keymap for Enter key
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<CR>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            -- Get the title from the buffer
-            local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
-            local title = lines[1]:gsub("^Title: ", ""):trim()
+    vim.keymap.set('i', '<CR>', function()
+        -- Get the title from the buffer
+        local lines = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
+        local title = lines[1]:gsub("^Title: ", ""):trim()
 
-            if title == "" then
-                vim.notify("Please enter a title", vim.log.levels.WARN)
-                return
-            end
-
-            -- Close the floating window
-            vim.api.nvim_win_close(win, true)
-
-            -- Create the book
-            M.create_book_files(title)
+        if title == "" then
+            vim.notify("Please enter a title", vim.log.levels.WARN)
+            return
         end
-    })
+
+        -- Close the floating window
+        vim.api.nvim_win_close(win, true)
+
+        -- Create the book
+        M.create_book_files(title)
+    end, { noremap = true, silent = true, buffer = buf })
 
     -- Set up keymap for Escape key to close window
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<Esc>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-        end
-    })
+    vim.keymap.set('i', '<Esc>', function()
+        vim.api.nvim_win_close(win, true)
+    end, { noremap = true, silent = true, buffer = buf })
 end
 
 function M.create_book_files(title)
@@ -594,12 +583,12 @@ function M.create_book_files(title)
         -- Get updated total lines after insertion
         total_lines = vim.api.nvim_buf_line_count(0)
 
-        -- Position cursor on the 4th last line (the blank line after %\printindex)
+        -- Position cursor on the 4th last line (the blank line after %\\printindex)
         local target_line = total_lines - 7
         vim.api.nvim_win_set_cursor(0, {target_line, 0})
 
         -- Enter insert mode
-        vim.cmd('startinsert')
+        vim.cmd.startinsert()
 
         vim.notify("Book created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
     else
@@ -623,23 +612,14 @@ function M.updateBlogPage()
         return
     end
 
-    -- Extract the part starting from "assets" and prepend with "././"
-    local modified_path = current_file:match(".*(assets.*)")
-
-    if not modified_path then
-        vim.notify("Could not find 'assets' in current file path: " .. current_file, vim.log.levels.ERROR)
-        return
-    end
-
-    -- Prepend "././" to the assets path
-	local final_path = "././" .. modified_path:gsub("%.tex$", ".pdf")
+    -- Source now lives outside the website (in ~/Documents); the published PDF
+    -- is <basename>.pdf under assets/pdfs/blogs. Derive the link from the .tex
+    -- basename, not the source path.
+    local final_path = "././assets/pdfs/blogs/"
+        .. vim.fn.fnamemodify(current_file, ":t"):gsub("%.tex$", ".pdf")
 
     -- Create the clipboard content in the specified format
-    local clipboard_content = string.format([[  {
-    name: "title",
-    desc: "here",
-    link: "%s"
-  },]], final_path)
+    local clipboard_content = string.format([[  {\n    name: "title",\n    desc: "here",\n    link: "%s"\n  },]], final_path)
 
     -- Copy to clipboard
     vim.fn.setreg('+', clipboard_content)
@@ -653,71 +633,269 @@ function M.updateBlogPage()
     vim.notify("Opened blog webpage file in vsplit", vim.log.levels.INFO)
 end
 
-function M.publishToWebsite()
+function M.updateNotesPage()
+    if not M.notes_webpage_url then
+        vim.notify("ERROR: M.notes_webpage_url is nil!", vim.log.levels.ERROR)
+        return
+    end
 
-	local website_dir = M.website_dir
+    -- Get the current file path
+    local current_file = vim.api.nvim_buf_get_name(0)
 
-    vim.notify("Starting website build...", vim.log.levels.INFO)
+    if current_file == "" then
+        vim.notify("No file is currently open", vim.log.levels.WARN)
+        return
+    end
 
-    -- First run ng build
-    vim.fn.jobstart({"ng", "build"}, {
-        cwd = website_dir,
-        on_exit = function(job_id, exit_code, event_type)
-            if exit_code == 0 then
-                vim.notify("Build successful! Starting deployment...", vim.log.levels.INFO)
+    -- Source now lives outside the website (in ~/Documents); the published PDF
+    -- is <basename>.pdf under assets/pdfs/notes. Derive the link from the .tex
+    -- basename, not the source path.
+    local final_path = "././assets/pdfs/notes/"
+        .. vim.fn.fnamemodify(current_file, ":t"):gsub("%.tex$", ".pdf")
 
-                -- If build succeeded, run ng deploy
-                vim.fn.jobstart({"ng", "deploy", "--cname=nathanaelsrawley.com"}, {
-                    cwd = website_dir,
-                    on_exit = function(deploy_job_id, deploy_exit_code, deploy_event_type)
-                        if deploy_exit_code == 0 then
-                            vim.notify("🚀 Website deployed successfully to nathanaelsrawley.com!", vim.log.levels.INFO)
-                        else
-                            vim.notify("❌ Deployment failed (exit code: " .. deploy_exit_code .. ")", vim.log.levels.ERROR)
-                        end
-                    end,
-                    on_stderr = function(_, data, event)
-                        if data and #data > 0 then
-                            for _, line in ipairs(data) do
-                                if line ~= "" then
-                                    vim.notify("Deploy error: " .. line, vim.log.levels.ERROR)
-                                end
-                            end
-                        end
-                    end,
-                    on_stdout = function(_, data, event)
-                        if data and #data > 0 then
-                            for _, line in ipairs(data) do
-                                if line ~= "" then
-                                    vim.notify("Deploy: " .. line, vim.log.levels.INFO)
-                                end
-                            end
-                        end
-                    end
-                })
-            else
-                vim.notify("❌ Build failed (exit code: " .. exit_code .. ")", vim.log.levels.ERROR)
-            end
-        end,
-        on_stderr = function(job_id, data, event)
-            if data and #data > 0 then
-                for _, line in ipairs(data) do
-                    if line ~= "" then
-                        vim.notify("Build error: " .. line, vim.log.levels.ERROR)
-                    end
-                end
-            end
-        end,
-        on_stdout = function(job_id, data, event)
-            if data and #data > 0 then
-                for _, line in ipairs(data) do
-                    if line ~= "" then
-                        vim.notify("Build: " .. line, vim.log.levels.INFO)
-                    end
-                end
-            end
-        end
-    })
+    -- Create the clipboard content in the specified format
+    local clipboard_content = string.format([[  {\n    name: "title",\n    desc: "here",\n    link: "%s"\n  },]], final_path)
+
+    -- Copy to clipboard
+    vim.fn.setreg('+', clipboard_content)
+    vim.notify("Note object copied to clipboard with link: " .. final_path, vim.log.levels.INFO)
+
+    -- Expand the notes webpage URL
+    local notes_webpage = vim.fn.expand(M.notes_webpage_url)
+    vim.cmd("vsplit " .. vim.fn.fnameescape(notes_webpage))
+    vim.notify("Opened notes webpage file in vsplit", vim.log.levels.INFO)
+end
+
+-- ---------------------------------------------------------------------------
+-- Textbook freshness check
+--
+-- The ONLY coupling between a source textbook and its published copy is
+-- filename equality (case-insensitive, matching the macOS filesystem): a book
+-- published at
+--     <books_pdf_url>/<name>.pdf
+-- has its authoritative source at
+--     <textbooks_dir>/<some-dir>/<name>.pdf
+-- (globbed one level deep, so nested figures/*.pdf are ignored). No series-map,
+-- overlay.yaml, or hard-coded table is consulted — if that filename contract
+-- holds a book is tracked, and if it doesn't the book is simply skipped. If two
+-- source PDFs map to the same published name, the book is skipped with a warning
+-- rather than guessed at. This keeps the check decoupled from the series-map
+-- feature, which can change freely without breaking publishing.
+-- ---------------------------------------------------------------------------
+
+-- Index every source book PDF one level under textbooks_dir as
+-- lowercased-basename -> { paths }. The key is lowercased because macOS is
+-- case-insensitive: a book published as EYNTKA-Probability.pdf must still match
+-- a source built as EYNTKA-probability.pdf. A list (not a single path) is kept
+-- per key so a genuine collision — e.g. a stale pre-rename PDF left beside the
+-- current one — is surfaced by the caller instead of silently resolved by glob
+-- order (which would let the stale copy overwrite a live book).
+local function index_source_pdfs(textbooks_dir)
+	local index = {}
+	for _, path in ipairs(vim.fn.glob(textbooks_dir .. "/*/*.pdf", true, true)) do
+		-- Skip underscore-prefixed dirs (e.g. _archive/): they hold retired
+		-- copies whose names would otherwise collide with the live book.
+		local parent = vim.fn.fnamemodify(path, ":h:t")
+		if not parent:match("^_") then
+			local base = vim.fn.fnamemodify(path, ":t"):lower()
+			index[base] = index[base] or {}
+			table.insert(index[base], path)
+		end
+	end
+	return index
+end
+
+-- True when the two files differ in content: cheap size check first, then a
+-- byte comparison only when the sizes tie.
+local function files_differ(a, b, stat_a, stat_b)
+	if not stat_b then return true end
+	if stat_a.size ~= stat_b.size then return true end
+	vim.fn.system({ "cmp", "-s", a, b })
+	return vim.v.shell_error ~= 0
+end
+
+function M.syncAndCheckWebsite(on_ok)
+	local website_dir = vim.fn.expand(M.website_dir)
+	local output = {}
+	local function collect(_, data, _)
+		if not data then
+			return
+		end
+		for _, line in ipairs(data) do
+			if line ~= "" then
+				table.insert(output, line)
+			end
+		end
+	end
+
+	vim.notify("Syncing PDFs from source and running website checks…", vim.log.levels.INFO)
+
+	-- gen has to sit between the two: sync brings in new PDFs, gen re-derives the
+	-- manifests (page count, compile date, reading time) that /blog and /papers
+	-- render from them, and check validates the result. Without gen the freshly
+	-- synced PDF would be committed alongside a manifest still describing the
+	-- previous build.
+	vim.fn.jobstart({
+		"sh",
+		"-c",
+		"npm run --silent sync:pdfs && npm run --silent gen && npm run --silent check",
+	}, {
+		cwd = website_dir,
+		on_stdout = collect,
+		on_stderr = collect,
+		on_exit = function(_, exit_code, _)
+			if exit_code ~= 0 then
+				vim.notify(
+					("❌ PDF sync or website checks failed (exit code: %d). Nothing was pushed."):format(
+						exit_code
+					),
+					vim.log.levels.ERROR
+				)
+				for _, line in ipairs(output) do
+					vim.notify(line, vim.log.levels.ERROR)
+				end
+				vim.notify(
+					"Use :PublishToWebsite! to publish anyway, skipping the sync and checks.",
+					vim.log.levels.WARN
+				)
+				return
+			end
+			for _, line in ipairs(output) do
+				vim.notify(line, vim.log.levels.INFO)
+			end
+			on_ok()
+		end,
+	})
+end
+
+---@param opts? { skip_textbooks?: boolean } when skip_textbooks is true (the
+---   `:PublishToWebsite!` bang), the PDF sync and website checks are skipped and
+---   the build+push runs immediately.
+function M.publishToWebsite(opts)
+	opts = opts or {}
+	if opts.skip_textbooks then
+		return M.buildAndPush()
+	end
+
+	M.syncAndCheckWebsite(function()
+		M.buildAndPush()
+	end)
+end
+
+-- Build the standalone EYNTKA series map, sync it into the website assets, and
+-- (on success) commit + push the site. Only proceed to the push if the map
+-- build succeeds.
+function M.buildAndPush()
+	local website_dir = vim.fn.expand(M.website_dir)
+	local series_map_dir = vim.fn.expand(M.series_map_dir)
+	local textbooks_dir = vim.fn.expand(M.textbooks_dir)
+	local map_stderr = {}
+
+	-- Regenerate the book search / deep-link index (named results → pdf + page,
+	-- extracted from the compiled .aux files) straight into the website assets,
+	-- so the commit below sweeps it up alongside the series map. Runs first in
+	-- the chain: a broken index aborts the publish before anything is pushed.
+	local index_cmd = string.format(
+		"python3 %s > %s",
+		vim.fn.shellescape(textbooks_dir .. "/.eyntka/scripts/build-book-index.py"),
+		vim.fn.shellescape(website_dir .. "/src/assets/books-index.json")
+	)
+
+	vim.notify("Building book index + EYNTKA series map…", vim.log.levels.INFO)
+
+	vim.fn.jobstart({ "sh", "-c", index_cmd .. " && npm run build:viewer && npm run sync:web" }, {
+		cwd = series_map_dir,
+		env = { EYNTKA_WEBSITE = website_dir },
+		on_exit = function(_, map_exit_code, _)
+			if map_exit_code ~= 0 then
+				vim.notify(
+					"❌ Series-map build/sync failed (exit code: " .. map_exit_code .. "). Aborting publish.",
+					vim.log.levels.ERROR
+				)
+				for _, line in ipairs(map_stderr) do
+					vim.notify("Series-map error: " .. line, vim.log.levels.ERROR)
+				end
+				return
+			end
+			vim.notify("✅ Series map synced into website assets.", vim.log.levels.INFO)
+			M.commitAndPushWebsite(website_dir)
+		end,
+		on_stderr = function(_, data, _)
+			if data then
+				for _, line in ipairs(data) do
+					if line ~= "" then
+						table.insert(map_stderr, line)
+					end
+				end
+			end
+		end,
+		on_stdout = function(_, data, _)
+			if data then
+				for _, line in ipairs(data) do
+					if line ~= "" then
+						vim.notify("Series-map: " .. line, vim.log.levels.INFO)
+					end
+				end
+			end
+		end,
+	})
+end
+
+-- Commit the website source and push it. GitHub Actions (.github/workflows/
+-- deploy.yml on the `archive` branch) then builds + publishes to gh-pages on
+-- GitHub's servers — so the slow local `ng build`/`ng deploy` is gone, and only
+-- a small source push leaves this machine.
+function M.commitAndPushWebsite(website_dir)
+	local git_stderr = {}
+	vim.notify("Committing + pushing source (GitHub Actions will build & deploy)…", vim.log.levels.INFO)
+
+	-- Stage every working-tree change under the website dir (the `.` pathspec
+	-- keeps this scoped to nate-website/, not the sibling projects in the repo
+	-- root) so the deploy button captures new/updated books, notes, and blogs
+	-- without a separate manual commit. GitHub Actions rebuilds the whole
+	-- committed source on push.
+	vim.fn.jobstart(
+		{
+			"sh",
+			"-c",
+			"git add -A . && (git commit -m 'Publish update' || echo 'nothing to commit') && git push origin HEAD:archive",
+		},
+		{
+			cwd = website_dir,
+			on_exit = function(_, exit_code, _)
+				if exit_code == 0 then
+					vim.notify(
+						"🚀 Pushed. GitHub Actions is now building & deploying — watch the repo's Actions tab; the site updates in a couple of minutes.",
+						vim.log.levels.INFO
+					)
+				else
+					vim.notify("❌ git push failed (exit code: " .. exit_code .. ").", vim.log.levels.ERROR)
+					for _, line in ipairs(git_stderr) do
+						vim.notify("git: " .. line, vim.log.levels.ERROR)
+					end
+				end
+			end,
+			on_stderr = function(_, data, _)
+				if data then
+					for _, line in ipairs(data) do
+						if line ~= "" then
+							table.insert(git_stderr, line)
+							vim.notify("git: " .. line, vim.log.levels.INFO)
+						end
+					end
+				end
+			end,
+			on_stdout = function(_, data, _)
+				if data then
+					for _, line in ipairs(data) do
+						if line ~= "" then
+							vim.notify("git: " .. line, vim.log.levels.INFO)
+						end
+					end
+				end
+			end,
+		}
+	)
 end
 
 function M.copyBlogToWebsite()
@@ -747,7 +925,38 @@ function M.copyBlogToWebsite()
     if vim.fn.filereadable(dest_path) == 1 then
         M.show_replace_prompt(pdf_path, dest_path)
     else
-        M.copy_books_file(pdf_path, dest_path)
+        M.copy_file_to_website(pdf_path, dest_path)
+    end
+end
+
+function M.copyNotesToWebsite()
+    -- Get the current file path
+    local current_file = vim.api.nvim_buf_get_name(0)
+
+    if current_file == "" then
+        vim.notify("No file is currently open", vim.log.levels.WARN)
+        return
+    end
+
+    -- Replace .tex with .pdf to get pdf_path
+    local pdf_path = current_file:gsub("%.tex$", ".pdf")
+
+    -- Check if the source PDF exists
+    if vim.fn.filereadable(pdf_path) == 0 then
+        vim.notify("PDF file not found: " .. pdf_path, vim.log.levels.ERROR)
+        return
+    end
+
+    -- Get destination directory and file path
+    local dest_dir = vim.fn.expand(M.notes_pdf_url) -- Assuming notes_pdf_url is the correct public destination
+    local filename = vim.fn.fnamemodify(pdf_path, ":t") -- Get just the filename
+    local dest_path = dest_dir .. "/" .. filename
+
+    -- Check if destination file already exists
+    if vim.fn.filereadable(dest_path) == 1 then
+        M.show_replace_prompt(pdf_path, dest_path)
+    else
+        M.copy_file_to_website(pdf_path, dest_path)
     end
 end
 
@@ -778,7 +987,7 @@ function M.copyBooksToWebsite()
     if vim.fn.filereadable(dest_path) == 1 then
         M.show_replace_prompt(pdf_path, dest_path)
     else
-        M.copy_books_file(pdf_path, dest_path)
+        M.copy_file_to_website(pdf_path, dest_path)
     end
 end
 
@@ -828,47 +1037,22 @@ function M.show_replace_prompt(source_path, dest_path)
 
     vim.api.nvim_buf_set_lines(buf, 0, -1, false, prompt_lines)
 
-    -- Set up keymap for Enter key (replace)
-    vim.api.nvim_buf_set_keymap(buf, 'n', '<CR>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-            M.copy_books_file(source_path, dest_path)
-        end
-    })
+    local on_confirm = function()
+        vim.api.nvim_win_close(win, true)
+        M.copy_file_to_website(source_path, dest_path)
+    end
 
-    -- Set up keymap for Escape key (cancel)
-    vim.api.nvim_buf_set_keymap(buf, 'n', '<Esc>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-            vim.notify("Copy operation aborted", vim.log.levels.WARN)
-        end
-    })
+    local on_cancel = function()
+        vim.api.nvim_win_close(win, true)
+        vim.notify("Copy operation aborted", vim.log.levels.WARN)
+    end
 
-    -- Also set up keymaps for insert mode
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<CR>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-            M.copy_books_file(source_path, dest_path)
-        end
-    })
-
-    vim.api.nvim_buf_set_keymap(buf, 'i', '<Esc>', '', {
-        noremap = true,
-        silent = true,
-        callback = function()
-            vim.api.nvim_win_close(win, true)
-            vim.notify("Copy operation aborted", vim.log.levels.WARN)
-        end
-    })
+    -- Set up keymaps
+    vim.keymap.set({'n', 'i'}, '<CR>', on_confirm, { noremap = true, silent = true, buffer = buf })
+    vim.keymap.set({'n', 'i'}, '<Esc>', on_cancel, { noremap = true, silent = true, buffer = buf })
 end
 
-function M.copy_books_file(source_path, dest_path)
+function M.copy_file_to_website(source_path, dest_path)
     -- Ensure destination directory exists
     local dest_dir = vim.fn.fnamemodify(dest_path, ":h")
     vim.fn.mkdir(dest_dir, "p")
@@ -880,13 +1064,13 @@ function M.copy_books_file(source_path, dest_path)
     -- Check if copy was successful
     if vim.v.shell_error == 0 then
         local filename = vim.fn.fnamemodify(dest_path, ":t")
-        vim.notify("✅ Successfully copied " .. filename .. " to website books directory", vim.log.levels.INFO)
+        vim.notify("✅ Successfully copied " .. filename .. " to website assets", vim.log.levels.INFO)
     else
         vim.notify("❌ Failed to copy file: " .. result, vim.log.levels.ERROR)
     end
 end
 
-function M.updatebooksPage()
+function M.updateBooksPage()
     -- Check if books_webpage_url is defined
     if not M.books_webpage_url then
         vim.notify("ERROR: M.books_webpage_url is not defined!", vim.log.levels.ERROR)
