@@ -131,106 +131,60 @@ function M.createNewBlog()
     end, { noremap = true, silent = true, buffer = buf })
 end
 
-function M.create_blog_files(title)
-    -- Debug: Check if variables are accessible
-    -- print("DEBUG: M.blog_source_code_url = " .. tostring(M.blog_source_code_url))
-    -- print("DEBUG: M.blog_latex_template = " .. tostring(M.blog_latex_template))
-
-    if not M.blog_source_code_url or not M.blog_latex_template then
-        vim.notify("ERROR: Required paths are nil!", vim.log.levels.ERROR)
+--- Create `<root>/<slug>/<slug>.tex` from a noethervim-tex template, with an
+--- empty bibliography.bib beside it, and open it in insert mode where the
+--- template's `<<cursor>>` mark was. Rendered inline, so the file is
+--- self-contained; `title` fills `<<title>>`, and the other placeholders come
+--- from noethervim-tex's `preamble.vars` (the author, for one).
+local function create_from_template(kind, root, template, title, display_title)
+    local ok, preamble = pcall(require, "noethervim-tex.preamble")
+    if not ok then
+        vim.notify("WebsiteTools: noethervim-tex is not available", vim.log.levels.ERROR)
         return
     end
-
-    -- Expand the paths
-    local blog_source = vim.fn.expand(M.blog_source_code_url)
-    local template_path = vim.fn.expand(M.blog_latex_template)
-
-    -- Create folder name from title (replace spaces and special chars with underscores)
-    local folder_name = title:lower():gsub("[^%w%s]", ""):gsub("%s+", "_")
-    local blog_folder = blog_source .. "/" .. folder_name
-
-    -- Create the directory
-    vim.fn.mkdir(blog_folder, "p")
-
-    -- Create the latex file path
-    local latex_file = blog_folder .. "/" .. folder_name .. ".tex"
-
-    -- Create the bibliography file path
-    local bib_file = blog_folder .. "/" .. "bibliography.bib"
-
-    -- Read the template file
-    local template_content = {}
-    local template_file = io.open(template_path, "r")
-
-    if template_file then
-        for line in template_file:lines() do
-            -- Replace any placeholder with actual title (keeping spaces)
-            line = line:gsub("BLOG_TITLE_PLACEHOLDER", title)
-            table.insert(template_content, line)
-        end
-        template_file:close()
-    else
+    local template_path = vim.fn.expand(template)
+    if vim.fn.filereadable(template_path) == 0 then
         vim.notify("Template file not found: " .. template_path, vim.log.levels.ERROR)
         return
     end
 
-    -- Write the template content to the new file
-    local new_file = io.open(latex_file, "w")
-    if new_file then
-        for _, line in ipairs(template_content) do
-            new_file:write(line .. "\n")
-        end
-        new_file:close()
+    local folder_name = title:lower():gsub("[^%w%s]", ""):gsub("%s+", "_")
+    local folder = vim.fn.expand(root) .. "/" .. folder_name
+    vim.fn.mkdir(folder, "p")
+    local latex_file = folder .. "/" .. folder_name .. ".tex"
 
-        -- Create empty bibliography file
-        local bib_file_handle = io.open(bib_file, "w")
-        if bib_file_handle then
-            bib_file_handle:write("% Bibliography for " .. title .. "\n")
-            bib_file_handle:close()
-        end
-
-        -- Open the new file
-        vim.cmd("edit " .. latex_file)
-
-        -- Insert title at position 20:8 (convert underscores to spaces)
-        local title_with_spaces = title:gsub("_", " ")
-        local total_lines = vim.api.nvim_buf_line_count(0)
-
-        -- Ensure we have at least 20 lines
-        if total_lines < 20 then
-            -- Add empty lines to reach line 20
-            local empty_lines = {}
-            for i = total_lines + 1, 20 do
-                table.insert(empty_lines, "")
-            end
-            vim.api.nvim_buf_set_lines(0, total_lines, total_lines, false, empty_lines)
-        end
-
-        -- Get the current content of line 20
-        local line_20 = vim.api.nvim_buf_get_lines(0, 19, 20, false)[1] or ""
-
-        -- Insert title at position 8 (0-indexed = 7)
-        local before_pos = line_20:sub(1, 7)
-        local after_pos = line_20:sub(8)
-        local new_line_20 = before_pos .. title_with_spaces .. after_pos
-
-        -- Set the modified line 20
-        vim.api.nvim_buf_set_lines(0, 19, 20, false, {new_line_20})
-
-        -- Get updated total lines after potential additions
-        total_lines = vim.api.nvim_buf_line_count(0)
-
-        -- Position cursor at 2nd line from bottom
-        local target_line = math.max(1, total_lines - 5)
-        vim.api.nvim_win_set_cursor(0, {target_line, 0})
-
-        -- Enter insert mode
-        vim.cmd.startinsert()
-
-        vim.notify("Blog created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
-    else
-        vim.notify("Failed to create file: " .. latex_file, vim.log.levels.ERROR)
+    local bib = io.open(folder .. "/bibliography.bib", "w")
+    if bib then
+        bib:write("% Bibliography for " .. title .. "\n")
+        bib:close()
     end
+
+    vim.cmd("edit " .. vim.fn.fnameescape(latex_file))
+    local rendered = preamble.render(0, template_path, {
+        mode = "inline",
+        vars = vim.tbl_extend("force", preamble.config().vars, { title = display_title }),
+    })
+    local row = #rendered.lines
+    for i, line in ipairs(rendered.lines) do
+        if line:find("<<cursor>>", 1, true) then
+            row = i
+            rendered.lines[i] = line:gsub("<<cursor>>", "")
+        end
+    end
+    vim.api.nvim_buf_set_lines(0, 0, -1, false, rendered.lines)
+    vim.cmd("silent write")
+    vim.api.nvim_win_set_cursor(0, { row, 0 })
+    vim.cmd.startinsert()
+    vim.notify(kind .. " created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
+end
+
+function M.create_blog_files(title)
+    if not M.blog_source_code_url or not M.blog_latex_template then
+        vim.notify("ERROR: Required paths are nil!", vim.log.levels.ERROR)
+        return
+    end
+    create_from_template("Blog", M.blog_source_code_url, M.blog_latex_template,
+        title, (title:gsub("_", " ")))
 end
 
 function M.createNewNote()
@@ -322,94 +276,11 @@ function M.createNewNote()
 end
 
 function M.create_note_files(title)
-    -- Debug: Check if variables are accessible
     if not M.notes_source_code_url or not M.notes_latex_template then
         vim.notify("ERROR: Required paths are nil!", vim.log.levels.ERROR)
         return
     end
-
-    -- Expand the paths
-    local note_source = vim.fn.expand(M.notes_source_code_url)
-    local template_path = vim.fn.expand(M.notes_latex_template)
-
-    -- Create folder name from title (replace spaces and special chars with underscores)
-    local folder_name = title:lower():gsub("[^%w%s]", ""):gsub("%s+", "_")
-    local note_folder = note_source .. "/" .. folder_name
-
-    -- Create the directory
-    vim.fn.mkdir(note_folder, "p")
-
-    -- Create the latex file path
-    local latex_file = note_folder .. "/" .. folder_name .. ".tex"
-
-    -- Create the bibliography file path
-    local bib_file = note_folder .. "/" .. "bibliography.bib"
-
-    -- Read the template file
-    local template_content = {}
-    local template_file = io.open(template_path, "r")
-
-    if template_file then
-        for line in template_file:lines() do
-            -- Replace any placeholder with actual title (keeping spaces)
-            line = line:gsub("NOTE TITLE PLACEHOLDER", title)
-            table.insert(template_content, line)
-        end
-        template_file:close()
-    else
-        vim.notify("Template file not found: " .. template_path, vim.log.levels.ERROR)
-        return
-    end
-
-    -- Write the template content to the new file
-    local new_file = io.open(latex_file, "w")
-    if new_file then
-        for _, line in ipairs(template_content) do
-            new_file:write(line .. "\n")
-        end
-        new_file:close()
-
-        -- Create empty bibliography file
-        local bib_file_handle = io.open(bib_file, "w")
-        if bib_file_handle then
-            bib_file_handle:write("% Bibliography for " .. title .. "\n")
-            bib_file_handle:close()
-        end
-
-        -- Open the new file
-        vim.cmd("edit " .. latex_file)
-
-        -- Get current total lines
-        local total_lines = vim.api.nvim_buf_line_count(0)
-
-        -- Insert the ending content at the end of the file
-        local ending_content = {
-            "\\maketitle",
-            "\\tableofcontents",
-            "",
-            "",
-            "",
-            "\\newpage",
-            "\\printbibliography",
-            "\\end{document}"
-        }
-
-        -- Insert the ending content at the end of the file
-        vim.api.nvim_buf_set_lines(0, total_lines, total_lines, false, ending_content)
-
-        -- Get updated total lines after insertion
-        total_lines = vim.api.nvim_buf_line_count(0)
-
-        local target_line = total_lines - 4
-        vim.api.nvim_win_set_cursor(0, {target_line, 0})
-
-        -- Enter insert mode
-        vim.cmd.startinsert()
-
-        vim.notify("Note created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
-    else
-        vim.notify("Failed to create file: " .. latex_file, vim.log.levels.ERROR)
-    end
+    create_from_template("Note", M.notes_source_code_url, M.notes_latex_template, title, title)
 end
 
 function M.createNewBook()
@@ -501,99 +372,11 @@ function M.createNewBook()
 end
 
 function M.create_book_files(title)
-    -- Debug: Check if variables are accessible
     if not M.books_pdf_url or not M.books_latex_template then
         vim.notify("ERROR: Required paths are nil!", vim.log.levels.ERROR)
         return
     end
-
-    -- Expand the paths
-    local books_source = vim.fn.expand(M.books_pdf_url)
-    local template_path = vim.fn.expand(M.books_latex_template)
-
-    -- Create folder name from title (replace spaces and special chars with underscores)
-    local folder_name = title:lower():gsub("[^%w%s]", ""):gsub("%s+", "_")
-    local book_folder = books_source .. "/" .. folder_name
-
-    -- Create the directory
-    vim.fn.mkdir(book_folder, "p")
-
-    -- Create the latex file path
-    local latex_file = book_folder .. "/" .. folder_name .. ".tex"
-
-    -- Create the bibliography file path
-    local bib_file = book_folder .. "/" .. "bibliography.bib"
-
-    -- Read the template file
-    local template_content = {}
-    local template_file = io.open(template_path, "r")
-
-    if template_file then
-        for line in template_file:lines() do
-            -- Replace any placeholder with actual title (keeping spaces)
-            line = line:gsub("BOOK TITLE PLACEHOLDER", title)
-            table.insert(template_content, line)
-        end
-        template_file:close()
-    else
-        vim.notify("Template file not found: " .. template_path, vim.log.levels.ERROR)
-        return
-    end
-
-    -- Write the template content to the new file
-    local new_file = io.open(latex_file, "w")
-    if new_file then
-        for _, line in ipairs(template_content) do
-            new_file:write(line .. "\n")
-        end
-        new_file:close()
-
-        -- Create empty bibliography file
-        local bib_file_handle = io.open(bib_file, "w")
-        if bib_file_handle then
-            bib_file_handle:write("% Bibliography for " .. title .. "\n")
-            bib_file_handle:close()
-        end
-
-        -- Open the new file
-        vim.cmd("edit " .. latex_file)
-
-        -- Get current total lines
-        local total_lines = vim.api.nvim_buf_line_count(0)
-
-        -- Insert the ending content at the end of the file
-        local ending_content = {
-            "\\maketitle",
-            "\\tableofcontents",
-			"\\newpage",
-            "",
-            "",
-            "",
-            "\\newpage",
-            "\\printindex",
-            "",
-            "\\newpage",
-            "\\printbibliography",
-            "\\end{document}"
-        }
-
-        -- Insert the ending content at the end of the file
-        vim.api.nvim_buf_set_lines(0, total_lines, total_lines, false, ending_content)
-
-        -- Get updated total lines after insertion
-        total_lines = vim.api.nvim_buf_line_count(0)
-
-        -- Position cursor on the 4th last line (the blank line after %\\printindex)
-        local target_line = total_lines - 7
-        vim.api.nvim_win_set_cursor(0, {target_line, 0})
-
-        -- Enter insert mode
-        vim.cmd.startinsert()
-
-        vim.notify("Book created: " .. latex_file .. " (with bibliography.bib)", vim.log.levels.INFO)
-    else
-        vim.notify("Failed to create file: " .. latex_file, vim.log.levels.ERROR)
-    end
+    create_from_template("Book", M.books_pdf_url, M.books_latex_template, title, title)
 end
 function M.updateBlogPage()
     -- Debug: Check if variables are accessible
